@@ -1,3 +1,5 @@
+from random import shuffle
+
 def add_coords(a, b):
     return a[0] + b[0], a[1] + b[1]
 
@@ -83,16 +85,65 @@ def variants(piece):
 
 piece_variants = [variants(p) for p in pieces]
 
-def draw(board):
-    coords = {v:k[0] for k,v in months.items()} | {v:str(k)[-1] for k,v in days.items()}
-    template = [[coords.get((row,col),' ') for col in range(7)] for row in range(7)]
-    template = [[' ' for col in range(7)] for row in range(7)]    
+def get_box_char(coord, shape):
+    up = (coord[0] - 1, coord[1]) in shape
+    down = (coord[0] + 1, coord[1]) in shape
+    left = (coord[0], coord[1] - 1) in shape
+    right = (coord[0], coord[1] + 1) in shape
+    if up and down and left and right:
+        return '╋'
+    if up and down and left:
+        return '┫'
+    if up and down and right:
+        return '┣'
+    if left and right and up:
+        return '┻'
+    if left and right and down:
+        return '┳'
+    if left and right:
+        return '━'
+    if up and down:
+        return '┃'
+    if up and right:
+        return '┗'
+    if up and left:
+        return '┛'
+    if down and right:
+        return '┏'
+    if down and left:
+        return '┓'
+    if up:
+        return '╹'
+    if down:
+        return '╻'
+    if left:
+        return '╸'
+    if right:
+        return '╺'
+    return '╳'
+
+
+def draw_box(board):
+    template = [['.' if (row, col) in board.all_coords else ' ' for col in range(7)] for row in range(7)]    
     for index, val in enumerate(board.pieces.items()):
         anchor = val[0]
         shape = val[1]
-        for c in [add_coords(_, anchor) for _ in shape]:
-            template[c[0]][c[1]] = str(index)
+        for c in shape:
+            coord = add_coords(c, anchor)
+            template[coord[0]][coord[1]] = get_box_char(c, shape)
     return '\n'.join([''.join(_) for _ in template])
+
+def draw(board):
+    emoji = ['⚫','⚪','🔴','🔵','🟢','🟡','🟠','🟣','🟤']
+    template = [['🔲' if (row, col) in board.all_coords else '⬜' for col in range(7)] for row in range(7)] 
+    for index, val in enumerate(board.pieces.items()):
+        anchor = val[0]
+        shape = val[1]
+        for c in shape:
+            coord = add_coords(c, anchor)
+            template[coord[0]][coord[1]] = emoji[index]
+    return '\n'.join([''.join(_) for _ in template])
+
     
 
 class Board:
@@ -137,12 +188,11 @@ class Game:
         self.boards = [Board()]
 
     def solve(self, month, day):
-        # print(months[month], days[day])
         next_boards = []
         self.boards[0].avail_coords.remove(months[month])
         self.boards[0].avail_coords.remove(days[day])
         for piece_variant in piece_variants:
-            print("piece: ", piece_variant[0])
+            print("piece: ", list(piece_variant)[0])
             for board in self.boards:
                 for c in board.all_coords:
                     for p_v in piece_variant:
@@ -153,7 +203,55 @@ class Game:
             self.boards = next_boards
             next_boards = []
             print(f"boards: {len(self.boards)}")
+            # for board in self.boards:
+            #     print(draw(board) + "\n")
         return self.boards
 
-test_month = (0,2) # march
-test_day = (6, 3) # 30
+    def solve_dfs_step(self, board, remaining_piece_variants):
+        if len(remaining_piece_variants) == 0:
+            return board
+        for c in board.all_coords:
+            for p_v in remaining_piece_variants[0]:
+                if board.does_fit(p_v, c):
+                    next_board = board.clone()
+                    next_board.place_piece(p_v, c)
+                    res = self.solve_dfs_step(next_board, remaining_piece_variants[1:])
+                    if res:
+                        return res
+
+
+    def solve_dfs(self, month, day):
+        board = Board()
+        board.avail_coords.remove(months[month])
+        board.avail_coords.remove(days[day])
+        shuffled_pieces = piece_variants[:]
+        shuffle(shuffled_pieces)
+        return self.solve_dfs_step(board, shuffled_pieces)
+        
+
+    def solve_fast(self, month, day):
+        next_boards = []
+        self.boards[0].avail_coords.remove(months[month])
+        self.boards[0].avail_coords.remove(days[day])
+        for piece_variant in piece_variants[:4]:
+            print("piece: ", list(piece_variant)[0])
+            for board in self.boards:
+                for c in board.all_coords:
+                    for p_v in piece_variant:
+                        if board.does_fit(p_v, c):
+                            next_board = board.clone()
+                            next_board.place_piece(p_v,c)
+                            next_boards.append(next_board)
+            filtered_next_boards = next_boards[:1]
+            for board in next_boards[1:]:
+                for filtered_board in filtered_next_boards:
+                    if board.avail_coords == filtered_board.avail_coords:
+                        break
+                else:
+                    filtered_next_boards.append(board)
+            self.boards = filtered_next_boards
+            next_boards = []
+            print(f"boards: {len(self.boards)}")
+            # for board in self.boards:
+            #     print(draw(board) + "\n")
+        return self.boards
